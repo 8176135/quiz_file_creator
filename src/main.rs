@@ -24,21 +24,23 @@ fn print_default_screen(question_num: usize, data: &Vec<Vec<String>>, status: &s
     println!();
 
     println!("Commands:");
-    println!("    'Edit <x>' to edit values");
+    println!("    'Edit <x> <new text>' to edit values");
     println!("    'Next'/'Prev' to go to next or previous questions");
     println!("    'List' to list all questions");
     println!("    'Go <x>' to go to specific question number");
 }
 
-fn save_file(data: &Vec<Vec<String>>) {
+fn save_file<P: AsRef<std::path::Path>>(file_path: P,data: &Vec<Vec<String>>) {
+    fs::copy(file_path, file_path.as_ref().join(".bak"));
 
+    fs::write(file_path, &data.iter().flat_map(|c| c.iter().flat_map(|v| v.as_bytes())).collect::<&Vec<u8>>());
 }
 
 fn main() {
     let quiz_data_file_path = std::env::args().nth(1).unwrap_or("QuizData.dat".to_owned());
     let data = fs::read_to_string(quiz_data_file_path).expect("Incorrect file path")
         .lines().map(|c| c.to_owned()).collect::<Vec<String>>();
-    let data = data.chunks(5).map(|c| c.to_owned()).collect::<Vec<_>>();
+    let mut data = data.chunks(5).map(|c| c.to_owned()).collect::<Vec<_>>();
 
     let mut rl = Editor::<()>::new();
     //let stdin = io::stdin();
@@ -70,18 +72,18 @@ fn main() {
             Ok(line) => {
                 rl.add_history_entry(&line);
                 line.trim().to_owned()
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                break
-            },
+                break;
+            }
             Err(ReadlineError::Eof) => {
                 println!("EOF");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         };
 
@@ -102,20 +104,40 @@ fn main() {
         let mut tokens = input.split(' ');
         let cmd = tokens.next();
         let param = tokens.next();
-
-        match cmd {
-            Some("next") => current_question_number += 1,
-            Some("prev") => current_question_number -= 1,
-            Some("go") => if let Some(param) = param {
-                if let Ok(param) = param.parse() {
-                    current_question_number = param;
+        let param2 = tokens.next();
+        match mode {
+            0 => match cmd {
+                Some("next") => current_question_number += 1,
+                Some("prev") => current_question_number -= 1,
+                Some("go") => if let Some(param) = param {
+                    if let Ok(param) = param.parse() {
+                        current_question_number = param;
+                    } else {
+                        status = "Go with invalid parameter".to_owned();
+                    }
                 } else {
-                    status = "Go with invalid parameter".to_owned();
-                }
-            } else {
-                status = "Go with no parameter".to_owned();
+                    status = "Go with no parameter".to_owned();
+                },
+                Some("edit") => if let Some(param) = param {
+                    if let Ok(param) = param.parse::<usize>() {
+                        if param < 5 && param >= 0 {
+                            if let Some(param2) = param2 {
+                                data[current_question_number as usize][param] = param2.to_owned();
+                            } else {
+                                status = "Edit with invalid parameters".to_owned();
+                            }
+                        } else {
+                            status = "Edit with invalid parameters".to_owned();
+                        }
+                    } else {
+                        status = "Edit with invalid parameter".to_owned();
+                    }
+                } else {
+                    status = "Edit with no parameters".to_owned();
+                },
+                _ => status = "Unknown Command".to_owned()
             }
-            _ => status = "Unknown Command".to_owned()
+            _ => ()
         }
     }
 }
