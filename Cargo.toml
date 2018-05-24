@@ -1,0 +1,8 @@
+[package]
+name = "quiz_file_creator"
+version = "0.1.0"
+authors = ["Hand-of-Cthulhu <3rdhandofcthulhu@gmail.com>"]
+
+[dependencies]
+rustyline = "*"
+regex = "*"
