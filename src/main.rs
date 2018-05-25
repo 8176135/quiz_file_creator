@@ -31,14 +31,19 @@ fn print_default_screen(question_num: usize, data: &Vec<Vec<String>>, status: &s
 }
 
 fn save_file<P: AsRef<std::path::Path>>(file_path: P,data: &Vec<Vec<String>>) {
-    fs::copy(file_path, file_path.as_ref().join(".bak"));
 
-    fs::write(file_path, &data.iter().flat_map(|c| c.iter().flat_map(|v| v.as_bytes())).collect::<&Vec<u8>>());
+    fs::copy(&file_path, file_path.as_ref().to_str().unwrap().to_owned() + ".bak").expect("File backup failed");
+
+    fs::write(&file_path, &data.iter()
+        .flat_map(|c| c.iter()
+            .flat_map(|v| (v.clone() + "\n").into_bytes()))
+        .collect::<Vec<u8>>())
+        .expect("Save failed");
 }
 
 fn main() {
     let quiz_data_file_path = std::env::args().nth(1).unwrap_or("QuizData.dat".to_owned());
-    let data = fs::read_to_string(quiz_data_file_path).expect("Incorrect file path")
+    let data = fs::read_to_string(&quiz_data_file_path).expect("Incorrect file path")
         .lines().map(|c| c.to_owned()).collect::<Vec<String>>();
     let mut data = data.chunks(5).map(|c| c.to_owned()).collect::<Vec<_>>();
 
@@ -50,7 +55,7 @@ fn main() {
     let mut status = String::new();
     let mut input = String::new();
 
-    let cmd_match = regex::Regex::new(r"([a-zA-Z]+) (\d+)?").unwrap();
+    //let cmd_match = regex::Regex::new(r"([a-zA-Z]+) (\d+)?").unwrap();
 
     loop {
         print!("{}[2J", 27 as char); // Clear terminal
@@ -74,7 +79,9 @@ fn main() {
                 line.trim().to_owned()
             }
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                println!("Saving...");
+                save_file(&quiz_data_file_path, &data);
+                println!("Saved");
                 break;
             }
             Err(ReadlineError::Eof) => {
@@ -100,16 +107,17 @@ fn main() {
 //        } else {
 //            status = "Unknown Command".to_owned();
 //        }
-        input = input.to_lowercase();
+        //input = input.to_lowercase();
         let mut tokens = input.split(' ');
         let cmd = tokens.next();
         let param = tokens.next();
-        let param2 = tokens.next();
+        let mut param2: String = tokens.fold("".to_owned(),|acc, c| acc + c + " ");
+        param2.pop();
         match mode {
             0 => match cmd {
-                Some("next") => current_question_number += 1,
-                Some("prev") => current_question_number -= 1,
-                Some("go") => if let Some(param) = param {
+                Some("next") | Some("Next") => current_question_number += 1,
+                Some("prev") | Some("Prev") => current_question_number -= 1,
+                Some("go") | Some("Go") => if let Some(param) = param {
                     if let Ok(param) = param.parse() {
                         current_question_number = param;
                     } else {
@@ -118,10 +126,10 @@ fn main() {
                 } else {
                     status = "Go with no parameter".to_owned();
                 },
-                Some("edit") => if let Some(param) = param {
+                Some("edit") | Some("Edit") => if let Some(param) = param {
                     if let Ok(param) = param.parse::<usize>() {
-                        if param < 5 && param >= 0 {
-                            if let Some(param2) = param2 {
+                        if param < 5 {
+                            if !param2.is_empty() {
                                 data[current_question_number as usize][param] = param2.to_owned();
                             } else {
                                 status = "Edit with invalid parameters".to_owned();
