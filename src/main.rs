@@ -24,15 +24,41 @@ fn print_default_screen(question_num: usize, data: &Vec<Vec<String>>, status: &s
     println!();
 
     println!("Commands:");
-    println!("    'Edit <x> <new text>' to edit values");
-    println!("    'Next'/'Prev' to go to next or previous questions");
-    println!("    'List' to list all questions");
-    println!("    'Go <x>' to go to specific question number");
+    println!("    'edit <x> <new text>' to edit values");
+    println!("    'next'/'prev' to go to next or previous questions");
+    println!("    'add'/'del' to add question, or delete current question");
+    println!("    'list' to list all questions");
+    println!("    'go <x>' to go to specific question number");
+    println!("'save' to save, Ctrl-C to save and quit, Ctrl-D discard and quit. (Probably want to save often, not sure how stable this is)");
 }
 
-fn save_file<P: AsRef<std::path::Path>>(file_path: P,data: &Vec<Vec<String>>) {
+fn print_list(question_num: usize, data: &Vec<Vec<String>>, status: &str, prev_cmd: &str) {
+    println!("All questions:");
+    println!();
+    println!("    Num -- Question");
+    for (index, datum) in data.iter().enumerate() {
+        if index == question_num {
+            print!(" --> ");
+        } else {
+            print!("     ");
+        }
+        println!("{}:   {}", index, datum[0]);
+    }
 
-    fs::copy(&file_path, file_path.as_ref().to_str().unwrap().to_owned() + ".bak").expect("File backup failed");
+    println!();
+    println!("Last Command: {}, Status: {}", prev_cmd, status);
+    println!();
+    println!("Commands:");
+    println!("    'edit <x> <new text>' to edit values");
+    println!("    'next'/'prev' to go to next or previous questions");
+    println!("    'add'/'del' to add question, or delete current question");
+    println!("    'list' to toggle list mode");
+    println!("    'go <x>' to go to specific question number");
+    println!("'save' to save, Ctrl-C to save and quit, Ctrl-D discard and quit. (Probably want to save often, not sure how stable this is)");
+}
+
+fn save_file<P: AsRef<std::path::Path>>(file_path: P, data: &Vec<Vec<String>>) {
+    fs::copy(&file_path, file_path.as_ref().to_str().unwrap().to_owned() + ".bak");//.expect("File backup failed");
 
     fs::write(&file_path, &data.iter()
         .flat_map(|c| c.iter()
@@ -43,7 +69,8 @@ fn save_file<P: AsRef<std::path::Path>>(file_path: P,data: &Vec<Vec<String>>) {
 
 fn main() {
     let quiz_data_file_path = std::env::args().nth(1).unwrap_or("QuizData.dat".to_owned());
-    let data = fs::read_to_string(&quiz_data_file_path).expect("Incorrect file path")
+
+    let data = fs::read_to_string(&quiz_data_file_path).unwrap_or("1+1\n5\n9\n1337\n2".to_owned())
         .lines().map(|c| c.to_owned()).collect::<Vec<String>>();
     let mut data = data.chunks(5).map(|c| c.to_owned()).collect::<Vec<_>>();
 
@@ -55,7 +82,7 @@ fn main() {
     let mut status = String::new();
     let mut input = String::new();
 
-    let cmd_match = regex::Regex::new(r#"(?:(next))|(?:(prev))|(?:(go) (\d+))|(?:(edit) ([0-5]) (.+))"#).unwrap();
+    let cmd_match = regex::Regex::new(r#"(?:(next))|(?:(prev))|(?:(go) (\d+))|(?:(edit) ([0-5]) (.+)|(?:(add))|(?:(del))|(?:(list))|(?:(save)))"#).unwrap();
 
     loop {
         print!("{}[2J", 27 as char); // Clear terminal
@@ -69,6 +96,7 @@ fn main() {
 
         match mode {
             0 => print_default_screen(current_question_number as usize, &data, &status, input.trim()),
+            1 => print_list(current_question_number as usize, &data, &status, input.trim()),
             _ => ()
         }
         status.clear();
@@ -85,7 +113,7 @@ fn main() {
                 break;
             }
             Err(ReadlineError::Eof) => {
-                println!("EOF");
+                println!("Changes discarded");
                 break;
             }
             Err(err) => {
@@ -121,56 +149,35 @@ fn main() {
         match captures.as_ref().map(|c| c.as_slice()) {
             Some(["next"]) => current_question_number += 1,
             Some(["prev"]) => current_question_number -= 1,
+            Some(["add"]) => {
+                data.push(vec!["1+1".to_owned(), "1".to_owned(), "4".to_owned(), "9000".to_owned(), "2".to_owned()]);
+                current_question_number = data.len() as i32 - 1;
+                status = "Added new question".to_owned();
+            }
+            Some(["del"]) => {
+                if data.len() == 1 {
+                    status = format!("Can't remove last question");
+                } else {
+                    data.remove(current_question_number as usize);
+                    status = format!("Removed question number {}", current_question_number);
+                }
+            }
+            Some(["list"]) => {
+                mode = if mode == 1 { 0 } else { 1 };
+            },
+            Some(["save"]) => {
+                save_file(&quiz_data_file_path, &data);
+                status = "Saved".to_owned();
+            }
             Some(["go", x]) => {
                 let x = x.parse().unwrap();
                 current_question_number = x;
-            },
+            }
             Some(["edit", x, text]) => {
-                let x = x.parse::<usize>().unwrap();
-
+                let x: usize = x.parse::<usize>().unwrap();
                 data[current_question_number as usize][x] = text.to_owned().to_owned();
             }
             _ => status = "Unknown command".to_owned(),
         }
-
-//        let mut tokens = input.split(' ');
-//        let cmd = tokens.next();
-//        let param = tokens.next();
-//        let mut param2: String = tokens.fold("".to_owned(),|acc, c| acc + c + " ");
-//        param2.pop();
-//        match mode {
-//            0 => match cmd {
-//                Some("next") | Some("Next") => current_question_number += 1,
-//                Some("prev") | Some("Prev") => current_question_number -= 1,
-//                Some("go") | Some("Go") => if let Some(param) = param {
-//                    if let Ok(param) = param.parse() {
-//                        current_question_number = param;
-//                    } else {
-//                        status = "Go with invalid parameter".to_owned();
-//                    }
-//                } else {
-//                    status = "Go with no parameter".to_owned();
-//                },
-//                Some("edit") | Some("Edit") => if let Some(param) = param {
-//                    if let Ok(param) = param.parse::<usize>() {
-//                        if param < 5 {
-//                            if !param2.is_empty() {
-//                                data[current_question_number as usize][param] = param2.to_owned();
-//                            } else {
-//                                status = "Edit with invalid parameters".to_owned();
-//                            }
-//                        } else {
-//                            status = "Edit with invalid parameters".to_owned();
-//                        }
-//                    } else {
-//                        status = "Edit with invalid parameter".to_owned();
-//                    }
-//                } else {
-//                    status = "Edit with no parameters".to_owned();
-//                },
-//                _ => status = "Unknown Command".to_owned()
-//            }
-//            _ => ()
-//        }
     }
 }
